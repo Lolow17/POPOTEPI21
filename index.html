@@ -227,7 +227,20 @@ function renderLog(){const log=document.getElementById('csLog');const recent=[..
 async function delConso(id){const c=DB.consos.find(x=>x.id===id);if(!c)return;const pr=DB.prods.find(x=>x.id===c.prodId);if(pr)pr.stock+=c.qty;DB.consos=DB.consos.filter(x=>x.id!==id);await sSet(KEY_CONSO,DB.consos);await sSet(KEY_PROD,DB.prods);renderLog();renderStock();}
 let blFilter='all';
 function renderBilan(){const tot={};DB.pers.forEach(p=>tot[p.id]=0);DB.consos.forEach(c=>{if(tot[c.persId]!=null)tot[c.persId]+=c.qty*c.prix;});let grand=0,paidCount=0,dueCount=0;DB.pers.forEach(p=>{if(tot[p.id]>0){if(p.paid)paidCount++;else{grand+=tot[p.id];dueCount++;}}});document.getElementById('blTot').textContent=money(grand);document.getElementById('blMeta').textContent=`${dueCount} à payer · ${paidCount} réglé${paidCount>1?'s':''}`;const byGrp={};GROUPS.forEach(g=>byGrp[g]=[]);DB.pers.forEach(p=>{if(tot[p.id]<=0)return;if(blFilter==='due'&&p.paid)return;if(blFilter==='paid'&&!p.paid)return;byGrp[p.grp||'À classer'].push({...p,due:tot[p.id]});});let html='';GROUPS.forEach(g=>{const list=byGrp[g];if(!list.length)return;const sum=list.reduce((s,p)=>s+(p.paid?0:p.due),0);html+=`<div class="grp open"><div class="grph" onclick="this.parentElement.classList.toggle('open')"><span><span class="chev">▸</span>${g} <span class="cnt">· ${list.length}</span></span><span class="mono">${money(sum)}</span></div><div class="grpbody">`;list.sort((a,b)=>a.nom.localeCompare(b.nom)).forEach(p=>{html+=`<div class="row" style="padding-left:6px"><div class="name">${p.nom}</div><div style="display:flex;align-items:center;gap:12px"><span class="amt mono">${money(p.due)}</span><span class="pill ${p.paid?'paid':'due'}" onclick="togglePaid('${p.id}')">${p.paid?'✓ Payé':'À payer'}</span></div></div>`;});html+='</div></div>';});document.getElementById('blGroups').innerHTML=html||'<div class="empty">Aucune conso ce mois</div>';}
-async function togglePaid(id){const p=DB.pers.find(x=>x.id===id);p.paid=!p.paid;await sSet(KEY_PERS,DB.pers);renderBilan();}
+async function togglePaid(id){
+  const p=DB.pers.find(x=>x.id===id);
+  if(!p.paid){
+    if(!confirm('Confirmer le paiement ? La dette sera remise à zéro.'))return;
+    p.paid=true;
+    DB.consos=DB.consos.filter(c=>c.persId!==id);
+    await sSet(KEY_CONSO,DB.consos);
+    await sSet(KEY_PERS,DB.pers);
+  } else {
+    p.paid=false;
+    await sSet(KEY_PERS,DB.pers);
+  }
+  renderBilan();renderLog();
+}
 function renderStock(){document.getElementById('stList').innerHTML=DB.prods.map(p=>{const low=p.stock<=5;return `<div class="row"><div><div class="name">${p.nom}</div><div class="sub">${money(p.prix)} l'unité</div></div><div class="stepper"><button onclick="stockStep('${p.id}',-1)">−</button><span class="v" style="${low?'color:#fca5a5':''}">${p.stock}</span><button onclick="stockStep('${p.id}',1)">＋</button></div></div>`;}).join('')||'<div class="empty">Aucun produit</div>';}
 async function stockStep(id,d){const p=DB.prods.find(x=>x.id===id);p.stock=Math.max(0,p.stock+d);await sSet(KEY_PROD,DB.prods);renderStock();if(curPers)renderProds();}
 function openProdModal(){renderProdEdit();openModal('mProd');}
